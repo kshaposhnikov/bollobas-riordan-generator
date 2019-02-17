@@ -2,6 +2,7 @@ package bollobasriordan
 
 import (
 	"github.com/kshaposhnikov/bollobas-riordan-generator/graph"
+	"github.com/sirupsen/logrus"
 	"sync"
 )
 
@@ -17,15 +18,16 @@ func NewBRMTGenerator(vCount int, eCount int, threadCount int) *BRMTGenerator {
 	}
 }
 
-func (gen *BRMTGenerator) Generate() graph.Graph {
+func (gen *BRMTGenerator) Generate() *graph.Graph {
 	generator := BRGenerator{
 		VCount: gen.VCount,
 		ECount: gen.ECount,
 	}
 	initialGraph := generator.buildInitialGraph(gen.VCount * gen.ECount)
+	logrus.Info("Initial building done")
 	batch := calculateInterval(gen.VCount*gen.ECount, gen.ThreadCount)
 	goroutineNumber := calculateInterval(initialGraph.GetNodeCount(), batch)
-	graphs := make(chan graph.Graph, goroutineNumber)
+	graphs := make(chan *graph.Graph, goroutineNumber)
 	var wg sync.WaitGroup
 	wg.Add(goroutineNumber)
 	for i := 0; i < goroutineNumber; i++ {
@@ -44,8 +46,9 @@ func (gen *BRMTGenerator) Generate() graph.Graph {
 
 	result := graph.NewGraph()
 	for item := range graphs {
-		result.Concat(&item)
+		result.Concat(item)
 	}
 
-	return *result
+	logrus.Info("Building Done")
+	return result
 }

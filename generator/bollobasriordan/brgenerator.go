@@ -20,7 +20,7 @@ type BRGenerator struct {
 	ECount int
 }
 
-func NewBRGenerator(vCount int, eCount int) *BRGenerator{
+func NewBRGenerator(vCount int, eCount int) *BRGenerator {
 	return &BRGenerator{
 		VCount: vCount,
 		ECount: eCount,
@@ -29,7 +29,7 @@ func NewBRGenerator(vCount int, eCount int) *BRGenerator{
 
 //bollobas-riordan
 // Number of threads should be less then m
-func (gen *BRGenerator) Generate() graph.Graph {
+func (gen *BRGenerator) Generate() *graph.Graph {
 	n := gen.VCount
 	m := gen.ECount
 	if m < 2 {
@@ -53,6 +53,9 @@ func (gen *BRGenerator) buildInitialGraph(n int) *graph.Graph {
 	degree[0] = 2
 	for i := 1; i <= n-1; i++ {
 		previousGraph = nextGraph(previousGraph, degree, random)
+		if i%100 == 0 {
+			logrus.Info("Iter i = ", i)
+		}
 		logrus.Debug("[simplegenerator.buildInitialGraph] Graph for n = ", i, *previousGraph)
 	}
 
@@ -78,13 +81,13 @@ func nextGraph(previousGraph *graph.Graph, degrees map[int]int, random *rand.Ran
 	})
 }
 
-func (gen *BRGenerator) buildFinalGraph(pregeneratedGraph *graph.Graph, from, to int, m int64) graph.Graph {
+func (gen *BRGenerator) buildFinalGraph(pregeneratedGraph *graph.Graph, from, to int, m int64) *graph.Graph {
 	result := graph.NewGraph()
 
 	left := int64(from)
 	j := left/m + 1
 	var right = j*m - 1
-	loops := []int64{}
+	var loops []int64
 	var l int64 = 0
 	for _, node := range pregeneratedGraph.Nodes[from:to] {
 		for _, associatedVertex := range node.AssociatedNodes {
@@ -114,7 +117,7 @@ func (gen *BRGenerator) buildFinalGraph(pregeneratedGraph *graph.Graph, from, to
 		l++
 	}
 
-	return *result
+	return result
 }
 
 func calculateInterval(number int, m int) int {
@@ -129,7 +132,7 @@ const nodeRate = 10
 
 func mtCalculateProbabilities(degrees map[int]int) []float64 {
 	if len(degrees) > runtime.NumCPU()*nodeRate {
-		batch := calculateInterval((len(degrees)), runtime.NumCPU())
+		batch := calculateInterval(len(degrees), runtime.NumCPU())
 		goroutineNumber := calculateInterval(len(degrees), batch)
 		probabilityResults := make(chan probabilityResult, goroutineNumber)
 		var wg sync.WaitGroup
