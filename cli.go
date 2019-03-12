@@ -24,15 +24,21 @@ var graphConfig string
 var dbName string
 var collectionName string
 var threadCount int
+var isDebug bool
 
 func init() {
 	generateCmd.Flags().StringVarP(&graphConfig, "config", "c", "", "Config has format \"NodeCount;EdgeCount\"")
 	generateCmd.Flags().StringVarP(&dbName, "db", "d", "", "MongoDB database name")
 	generateCmd.Flags().StringVarP(&collectionName, "storage", "s", "bollobas_riordan", "MongoDB collection name")
 	generateCmd.Flags().IntVarP(&threadCount, "threads", "t", 1, "Number of threads")
+	generateCmd.Flags().BoolVarP(&isDebug, "debug", "", false, "Enable debug logs")
 }
 
 func generate(cmd *cobra.Command, args []string) {
+	if isDebug {
+		logrus.SetLevel(logrus.DebugLevel)
+	}
+
 	template := regexp.MustCompile(`[0-9]+;[0-9]+`)
 	if template.MatchString(graphConfig) {
 		nm := strings.Split(template.FindString(graphConfig), ";")

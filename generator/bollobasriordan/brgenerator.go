@@ -16,31 +16,37 @@ import (
 )
 
 type BRGenerator struct {
-	VCount int
-	ECount int
+	VCount   int
+	ECount   int
+	coolRank []int
 }
 
 func NewBRGenerator(vCount int, eCount int) *BRGenerator {
-	return &BRGenerator{
-		VCount: vCount,
-		ECount: eCount,
+	generator := BRGenerator{
+		VCount:   vCount,
+		ECount:   eCount,
+		coolRank: make([]int, vCount*eCount),
 	}
+
+	for i := 0; i < len(generator.coolRank); i++ {
+		generator.coolRank[i] = 100
+	}
+
+	return &generator
 }
 
 //bollobas-riordan
 // Number of threads should be less then m
 func (gen *BRGenerator) Generate() *graph.Graph {
-	n := gen.VCount
-	m := gen.ECount
-	if m < 2 {
-		log.Fatal("m should more or equal 2")
+	if gen.ECount < 2 {
+		log.Fatal("ECount should more or equal 2")
 	}
 
-	var previousGraph = gen.buildInitialGraph(n * m)
-	return gen.buildFinalGraph(previousGraph, 0, previousGraph.GetNodeCount(), int64(m))
+	var previousGraph = gen.buildInitialGraph()
+	return gen.buildFinalGraph(previousGraph, 0, previousGraph.GetNodeCount(), int64(gen.ECount))
 }
 
-func (gen *BRGenerator) buildInitialGraph(n int) *graph.Graph {
+func (gen *BRGenerator) buildInitialGraph() *graph.Graph {
 	previousGraph := graph.NewGraph()
 	previousGraph.AddNode(graph.Node{
 		Id:                   1,
@@ -51,8 +57,8 @@ func (gen *BRGenerator) buildInitialGraph(n int) *graph.Graph {
 	random := rand.New(rand.NewSource(time.Now().UnixNano()))
 	degree := make(map[int]int)
 	degree[0] = 2
-	for i := 1; i <= n-1; i++ {
-		previousGraph = nextGraph(previousGraph, degree, random)
+	for i := 1; i <= gen.VCount*gen.ECount-1; i++ {
+		previousGraph = gen.nextGraph(previousGraph, degree, random)
 		if i%100 == 0 {
 			logrus.Info("Iter i = ", i)
 		}
@@ -62,9 +68,9 @@ func (gen *BRGenerator) buildInitialGraph(n int) *graph.Graph {
 	return previousGraph
 }
 
-func nextGraph(previousGraph *graph.Graph, degrees map[int]int, random *rand.Rand) *graph.Graph {
-	probabilities := mtCalculateProbabilities(degrees)
-	cdf := cumsum(probabilities)
+func (gen *BRGenerator) nextGraph(previousGraph *graph.Graph, degrees map[int]int, random *rand.Rand) *graph.Graph {
+	probabilities := gen.mtCalculateProbabilities(degrees)
+	cdf := gen.cumsum(probabilities)
 
 	x := random.Float64()
 	idx := sort.Search(len(cdf), func(i int) bool {
@@ -72,6 +78,7 @@ func nextGraph(previousGraph *graph.Graph, degrees map[int]int, random *rand.Ran
 	})
 
 	degrees[idx]++
+	gen.coolRank[idx]--
 
 	degrees[len(probabilities)-1]++
 	return previousGraph.AddNode(graph.Node{
@@ -94,7 +101,7 @@ func (gen *BRGenerator) buildFinalGraph(pregeneratedGraph *graph.Graph, from, to
 			if associatedVertex < right && associatedVertex > left {
 				loops = append(loops, j)
 			} else if associatedVertex >= right || associatedVertex <= left {
-				result = result.AddAssociatedNodeTo(j, int64(calculateInterval(int(associatedVertex), int(m))))
+				result = result.AddAssociatedNodeTo(j, int64(gen.calculateInterval(int(associatedVertex), int(m))))
 			}
 		}
 
@@ -120,7 +127,7 @@ func (gen *BRGenerator) buildFinalGraph(pregeneratedGraph *graph.Graph, from, to
 	return result
 }
 
-func calculateInterval(number int, m int) int {
+func (gen *BRGenerator) calculateInterval(number int, m int) int {
 	if number%m == 0 {
 		return number / m
 	} else {
@@ -130,10 +137,10 @@ func calculateInterval(number int, m int) int {
 
 const nodeRate = 10
 
-func mtCalculateProbabilities(degrees map[int]int) []float64 {
+func (gen *BRGenerator) mtCalculateProbabilities(degrees map[int]int) []float64 {
 	if len(degrees) > runtime.NumCPU()*nodeRate {
-		batch := calculateInterval(len(degrees), runtime.NumCPU())
-		goroutineNumber := calculateInterval(len(degrees), batch)
+		batch := gen.calculateInterval(len(degrees), runtime.NumCPU())
+		goroutineNumber := gen.calculateInterval(len(degrees), batch)
 		probabilityResults := make(chan probabilityResult, goroutineNumber)
 		var wg sync.WaitGroup
 		wg.Add(goroutineNumber)
@@ -148,7 +155,7 @@ func mtCalculateProbabilities(degrees map[int]int) []float64 {
 				defer wg.Done()
 				probabilityResults <- probabilityResult{
 					order,
-					calculateProbabilities(degrees, from, to),
+					gen.calculateProbabilities(degrees, from, to),
 				}
 			}(i)
 		}
@@ -168,25 +175,31 @@ func mtCalculateProbabilities(degrees map[int]int) []float64 {
 		}
 		return result
 	} else {
-		return calculateProbabilities(degrees, 0, len(degrees))
+		return gen.calculateProbabilities(degrees, 0, len(degrees))
 	}
 }
 
-func calculateProbabilities(degrees map[int]int, from, to int) []float64 {
+func (gen *BRGenerator) calculateProbabilities(degrees map[int]int, from, to int) []float64 {
 	n := float64(len(degrees) + 1)
 	var probabilities []float64
+	// Сделать кофэффициент большим для новой вершины и уменьшать по мере роста степени этой вершины
 	for i := from; i < to; i++ {
-		probabilities = append(probabilities, float64(degrees[i])/(2.0*n-1.0))
+		//probabilities = append(probabilities, float64(degrees[i])/(2.0*n-1.0))
+		logrus.Info("I = ", i, " len(coolRank) = ", len(gen.coolRank))
+		a := float64(gen.coolRank[i])
+		probabilities = append(probabilities, (float64(degrees[i])-1+a)/((a+1.0)*n+1.0))
 	}
 
 	if to == len(degrees) {
-		probabilities = append(probabilities, 1.0/(2.0*n-1.0))
+		//	probabilities = append(probabilities, 1.0/(2.0*n-1.0))
+		a := float64(gen.coolRank[len(degrees)])
+		probabilities = append(probabilities, a/((a+1.0)*n+1.0))
 	}
 
 	return probabilities
 }
 
-func cumsum(probabilities []float64) []float64 {
+func (gen *BRGenerator) cumsum(probabilities []float64) []float64 {
 	dest := make([]float64, len(probabilities))
 	return floats.CumSum(dest, probabilities)
 }

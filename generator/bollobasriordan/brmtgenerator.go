@@ -19,14 +19,10 @@ func NewBRMTGenerator(vCount int, eCount int, threadCount int) *BRMTGenerator {
 }
 
 func (gen *BRMTGenerator) Generate() *graph.Graph {
-	generator := BRGenerator{
-		VCount: gen.VCount,
-		ECount: gen.ECount,
-	}
-	initialGraph := generator.buildInitialGraph(gen.VCount * gen.ECount)
+	initialGraph := gen.BRGenerator.buildInitialGraph()
 	logrus.Info("Initial building done")
-	batch := calculateInterval(gen.VCount*gen.ECount, gen.ThreadCount)
-	goroutineNumber := calculateInterval(initialGraph.GetNodeCount(), batch)
+	batch := gen.calculateInterval(gen.VCount*gen.ECount, gen.ThreadCount)
+	goroutineNumber := gen.calculateInterval(initialGraph.GetNodeCount(), batch)
 	graphs := make(chan *graph.Graph, goroutineNumber)
 	var wg sync.WaitGroup
 	wg.Add(goroutineNumber)
@@ -38,7 +34,7 @@ func (gen *BRMTGenerator) Generate() *graph.Graph {
 		}
 		go func() {
 			defer wg.Done()
-			graphs <- generator.buildFinalGraph(initialGraph, from, to, int64(gen.ECount))
+			graphs <- gen.BRGenerator.buildFinalGraph(initialGraph, from, to, int64(gen.ECount))
 		}()
 	}
 	wg.Wait()
