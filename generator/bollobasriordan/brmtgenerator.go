@@ -34,7 +34,7 @@ func (gen *BRMTGenerator) Generate() *graph.Graph {
 		}
 		go func() {
 			defer wg.Done()
-			graphs <- gen.BRGenerator.buildFinalGraph(initialGraph, from, to, int64(gen.ECount))
+			graphs <- gen.BRGenerator.buildFinalGraph(initialGraph, from, to, int(gen.ECount))
 		}()
 	}
 	wg.Wait()

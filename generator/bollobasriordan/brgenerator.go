@@ -18,18 +18,18 @@ import (
 type BRGenerator struct {
 	VCount   int
 	ECount   int
-	coolRank []int
+	coolRank []float64
 }
 
 func NewBRGenerator(vCount int, eCount int) *BRGenerator {
 	generator := BRGenerator{
 		VCount:   vCount,
 		ECount:   eCount,
-		coolRank: make([]int, vCount*eCount),
+		coolRank: make([]float64, vCount*eCount),
 	}
 
 	for i := 0; i < len(generator.coolRank); i++ {
-		generator.coolRank[i] = 100
+		generator.coolRank[i] = 1
 	}
 
 	return &generator
@@ -43,7 +43,7 @@ func (gen *BRGenerator) Generate() *graph.Graph {
 	}
 
 	var previousGraph = gen.buildInitialGraph()
-	return gen.buildFinalGraph(previousGraph, 0, previousGraph.GetNodeCount(), int64(gen.ECount))
+	return gen.buildFinalGraph(previousGraph, 0, previousGraph.GetNodeCount(), gen.ECount)
 }
 
 func (gen *BRGenerator) buildInitialGraph() *graph.Graph {
@@ -51,16 +51,16 @@ func (gen *BRGenerator) buildInitialGraph() *graph.Graph {
 	previousGraph.AddNode(graph.Node{
 		Id:                   1,
 		AssociatedNodesCount: 1,
-		AssociatedNodes:      []int64{1},
+		AssociatedNodes:      []int{1},
 	})
 
 	random := rand.New(rand.NewSource(time.Now().UnixNano()))
 	degree := make(map[int]int)
 	degree[0] = 2
-	for i := 1; i <= gen.VCount*gen.ECount-1; i++ {
+	for i := 1; i < gen.VCount*gen.ECount; i++ {
 		previousGraph = gen.nextGraph(previousGraph, degree, random)
 		if i%100 == 0 {
-			logrus.Info("Iter i = ", i)
+			logrus.Debug("Iter i = ", i)
 		}
 		logrus.Debug("[simplegenerator.buildInitialGraph] Graph for n = ", i, *previousGraph)
 	}
@@ -78,30 +78,38 @@ func (gen *BRGenerator) nextGraph(previousGraph *graph.Graph, degrees map[int]in
 	})
 
 	degrees[idx]++
-	gen.coolRank[idx]--
+
+	tmp := gen.coolRank[idx] - 0.01
+	if tmp >= 0.47 {
+		gen.coolRank[idx] = tmp
+	}
+
+	//else {
+	//	gen.coolRank[idx] = 1
+	//}
 
 	degrees[len(probabilities)-1]++
 	return previousGraph.AddNode(graph.Node{
-		Id:                   int64(len(probabilities)),
+		Id:                   len(probabilities),
 		AssociatedNodesCount: 1,
-		AssociatedNodes:      []int64{int64(idx) + 1},
+		AssociatedNodes:      []int{idx + 1},
 	})
 }
 
-func (gen *BRGenerator) buildFinalGraph(pregeneratedGraph *graph.Graph, from, to int, m int64) *graph.Graph {
+func (gen *BRGenerator) buildFinalGraph(pregeneratedGraph *graph.Graph, from, to int, m int) *graph.Graph {
 	result := graph.NewGraph()
 
-	left := int64(from)
+	left := from
 	j := left/m + 1
 	var right = j*m - 1
-	var loops []int64
-	var l int64 = 0
+	var loops []int
+	var l int = 0
 	for _, node := range pregeneratedGraph.Nodes[from:to] {
 		for _, associatedVertex := range node.AssociatedNodes {
 			if associatedVertex < right && associatedVertex > left {
 				loops = append(loops, j)
 			} else if associatedVertex >= right || associatedVertex <= left {
-				result = result.AddAssociatedNodeTo(j, int64(gen.calculateInterval(int(associatedVertex), int(m))))
+				result = result.AddAssociatedNodeTo(j, gen.calculateInterval(associatedVertex, m))
 			}
 		}
 
@@ -115,7 +123,7 @@ func (gen *BRGenerator) buildFinalGraph(pregeneratedGraph *graph.Graph, from, to
 					AssociatedNodes:      loops,
 				})
 			}
-			loops = []int64{}
+			loops = []int{}
 			left = right + 1
 			right += m
 			j++
@@ -185,15 +193,18 @@ func (gen *BRGenerator) calculateProbabilities(degrees map[int]int, from, to int
 	// Сделать кофэффициент большим для новой вершины и уменьшать по мере роста степени этой вершины
 	for i := from; i < to; i++ {
 		//probabilities = append(probabilities, float64(degrees[i])/(2.0*n-1.0))
-		logrus.Info("I = ", i, " len(coolRank) = ", len(gen.coolRank))
 		a := float64(gen.coolRank[i])
-		probabilities = append(probabilities, (float64(degrees[i])-1+a)/((a+1.0)*n+1.0))
+		//a := 0.47 // лучший коээфициент
+		f := (float64(degrees[i]) + a - 1) / ((a+1.0)*n - 1.0)
+		probabilities = append(probabilities, f)
 	}
 
 	if to == len(degrees) {
-		//	probabilities = append(probabilities, 1.0/(2.0*n-1.0))
+		//probabilities = append(probabilities, 1.0/(2.0*n-1.0))
 		a := float64(gen.coolRank[len(degrees)])
-		probabilities = append(probabilities, a/((a+1.0)*n+1.0))
+		//a := 0.47
+		f := a / ((a+1.0)*n - 1.0)
+		probabilities = append(probabilities, f)
 	}
 
 	return probabilities

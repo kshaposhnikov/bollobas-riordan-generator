@@ -7,7 +7,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"gopkg.in/mgo.v2"
-	"log"
 	"regexp"
 	"strconv"
 	"strings"
@@ -24,6 +23,7 @@ var graphConfig string
 var dbName string
 var collectionName string
 var threadCount int
+var samplesCount int
 var isDebug bool
 
 func init() {
@@ -31,6 +31,7 @@ func init() {
 	generateCmd.Flags().StringVarP(&dbName, "db", "d", "", "MongoDB database name")
 	generateCmd.Flags().StringVarP(&collectionName, "storage", "s", "bollobas_riordan", "MongoDB collection name")
 	generateCmd.Flags().IntVarP(&threadCount, "threads", "t", 1, "Number of threads")
+	generateCmd.Flags().IntVarP(&samplesCount, "samplesCount", "", 10, "Samples count to generate")
 	generateCmd.Flags().BoolVarP(&isDebug, "debug", "", false, "Enable debug logs")
 }
 
@@ -51,16 +52,19 @@ func generate(cmd *cobra.Command, args []string) {
 			"threads": threadCount,
 		}).Debug("[Generate Command] Input parameters")
 
-		start := time.Now()
-		result := bollobasriordan.NewBRMTGenerator(n, m, threadCount).Generate()
+		for i := 0; i < samplesCount; i++ {
+			logrus.Info("Generate Sample #", i+1)
+			start := time.Now()
+			result := bollobasriordan.NewBRMTGenerator(n, m, threadCount).Generate()
 
-		removeSelfLoopAndMultipleEdges(result)
-		logrus.WithField("duration", time.Now().Sub(start)).Info("[Generate Command] Generation is done")
-		logrus.Debug("[Generate Command] Final Graph", result)
+			//removeSelfLoopAndMultipleEdges(result)
+			logrus.WithField("duration", time.Now().Sub(start)).Info("[Generate Command] Generation is done")
+			logrus.Debug("[Generate Command] Final Graph", result)
 
-		if dbName != "" {
-			removeSelfLoopAndMultipleEdges(result)
-			storeToDatabase(result)
+			if dbName != "" {
+				//	removeSelfLoopAndMultipleEdges(result)
+				storeToDatabase(result)
+			}
 		}
 	} else {
 		logrus.Error("Need to specify format `n;m`")
@@ -80,9 +84,9 @@ func removeSelfLoopAndMultipleEdges(graph *graph.Graph) {
 		}
 
 		if uniqueNodes.Cardinality() > 0 {
-			var tmp []int64
+			var tmp []int
 			for id := range uniqueNodes.Iter() {
-				tmp = append(tmp, id.(int64))
+				tmp = append(tmp, id.(int))
 			}
 
 			node.AssociatedNodes = tmp
@@ -101,10 +105,10 @@ func storeToDatabase(graph *graph.Graph) {
 	session, _ := mgo.Dial("localhost")
 	db := session.DB(dbName)
 	defer session.Clone()
-	for iter, node := range graph.Nodes {
-		err := db.C(collectionName).Insert(node)
-		if err != nil {
-			log.Fatal("#", iter, "Error in the time of inserting edge for node", node.Id, "\n", err)
-		}
+
+	e := db.C(collectionName).Insert(graph)
+
+	if e != nil {
+		logrus.Fatal("Error in the time of inserting graph", e)
 	}
 }
