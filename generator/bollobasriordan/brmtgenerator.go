@@ -7,13 +7,13 @@ import (
 )
 
 type BRMTGenerator struct {
-	BRGenerator
+	*BRGenerator
 	ThreadCount int
 }
 
 func NewBRMTGenerator(vCount int, eCount int, threadCount int) *BRMTGenerator {
 	return &BRMTGenerator{
-		BRGenerator: *NewBRGenerator(vCount, eCount),
+		BRGenerator: NewBRGenerator(vCount, eCount),
 		ThreadCount: threadCount,
 	}
 }
