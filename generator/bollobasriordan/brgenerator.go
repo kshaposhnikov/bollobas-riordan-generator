@@ -16,20 +16,22 @@ import (
 )
 
 type BRGenerator struct {
-	VCount   int
-	ECount   int
-	coolRank []float64
+	VCount                int
+	ECount                int
+	coolRank              []float64
+	initialAttractiveness float64
 }
 
 func NewBRGenerator(vCount int, eCount int) *BRGenerator {
 	generator := BRGenerator{
-		VCount:   vCount,
-		ECount:   eCount,
-		coolRank: make([]float64, vCount*eCount),
+		VCount:                vCount,
+		ECount:                eCount,
+		coolRank:              make([]float64, vCount*eCount),
+		initialAttractiveness: 1,
 	}
 
 	for i := 0; i < len(generator.coolRank); i++ {
-		generator.coolRank[i] = 1
+		generator.coolRank[i] = 0.47
 	}
 
 	return &generator
@@ -79,14 +81,20 @@ func (gen *BRGenerator) nextGraph(previousGraph *graph.Graph, degrees map[int]in
 
 	degrees[idx]++
 
-	tmp := gen.coolRank[idx] - 0.01
+	logrus.Debug("x: ", x, " idx: ", idx, " CDF: ", cdf, " probabilities: ", probabilities)
+
+	//tmp := gen.coolRank[idx] + 0.01
+	tmp := gen.initialAttractiveness - 0.05
 	if tmp >= 0.47 {
-		gen.coolRank[idx] = tmp
+		//gen.coolRank[idx] = tmp
+		gen.initialAttractiveness = tmp
 	}
 
 	//else {
 	//	gen.coolRank[idx] = 1
 	//}
+
+	logrus.Debug("len(probabilities)-1: ", len(probabilities)-1, " len(degrees): ", len(degrees))
 
 	degrees[len(probabilities)-1]++
 	return previousGraph.AddNode(graph.Node{
@@ -193,16 +201,25 @@ func (gen *BRGenerator) calculateProbabilities(degrees map[int]int, from, to int
 	// Сделать кофэффициент большим для новой вершины и уменьшать по мере роста степени этой вершины
 	for i := from; i < to; i++ {
 		//probabilities = append(probabilities, float64(degrees[i])/(2.0*n-1.0))
-		a := float64(gen.coolRank[i])
+		//a := float64(gen.coolRank[i])
+		a := gen.initialAttractiveness
+		logrus.Debug("a: ", a)
 		//a := 0.47 // лучший коээфициент
-		f := (float64(degrees[i]) + a - 1) / ((a+1.0)*n - 1.0)
+		f := (float64(degrees[i]) + a - 1.0) / ((a+1.0)*n - 1.0)
 		probabilities = append(probabilities, f)
 	}
 
 	if to == len(degrees) {
 		//probabilities = append(probabilities, 1.0/(2.0*n-1.0))
-		a := float64(gen.coolRank[len(degrees)])
-		//a := 0.47
+
+		logrus.Debug("len(degerees): ", len(degrees))
+
+		if len(gen.coolRank) <= len(degrees) {
+			logrus.Fatal(len(gen.coolRank), len(degrees))
+		}
+		//a := float64(gen.coolRank[len(degrees)])
+		a := gen.initialAttractiveness
+		logrus.Debug("a to: ", a)
 		f := a / ((a+1.0)*n - 1.0)
 		probabilities = append(probabilities, f)
 	}
